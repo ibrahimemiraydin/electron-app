@@ -1,10 +1,13 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, Tray, Menu } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
+let mainWindow: BrowserWindow | null = null;
+let tray: Tray | null = null;
+
 function createWindow(): void {
   // Create the browser window for URL entry
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -18,19 +21,16 @@ function createWindow(): void {
   mainWindow.setMenuBarVisibility(false);
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show();
+    mainWindow?.show();
   });
 
-  
   mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription, validatedURL) => {
-    mainWindow.webContents.send('load-error', {
+    mainWindow?.webContents.send('load-error', {
       errorCode,
       errorDescription,
       validatedURL,
     });
   });
-  
-  
 
   // Initial page (URL input form page)
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -61,19 +61,62 @@ function createWindow(): void {
     return { action: 'deny' }; // Prevent opening in the current window
   });
 
-  // HMR for renderer based on electron-vite CLI.
-  // Load the remote URL for development or the local HTML file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
-  }
+  // Pencere küçültüldüğünde tray simgesi oluştur
+  mainWindow.on('minimize', () => {
+    console.log('Window was minimized!');
+    mainWindow?.hide();
+    createTray();
+  });
+
+  mainWindow.on('close', (event) => {
+    if (app.quitting) {
+      mainWindow = null;
+    } else {
+      event.preventDefault();
+      mainWindow?.hide();
+      createTray();
+    }
+  });
+}
+
+function createTray(): void {
+  if (tray) return; // Eğer tray zaten varsa yeniden oluşturma
+
+  const trayIcon = join(__dirname, '../../build/icon.png'); // Tray için simge dosyası
+  tray = new Tray(trayIcon);
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Aç',
+      click: () => {
+        mainWindow?.show();
+      },
+    },
+    {
+      label: 'Kapat',
+      click: () => {
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+  tray.setToolTip('Uygulama'); // Tray simgesi açıklaması
+
+  tray.on('double-click', () => {
+    mainWindow?.show();
+  });
+
+  // Uygulama tamamen kapatıldığında tray temizle
+  tray.on('destroy', () => {
+    tray = null;
+  });
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron');
 
@@ -99,4 +142,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  app.quitting = true;  // `quitting` özelliğini true yapıyoruz
 });
