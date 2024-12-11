@@ -1,2 +1,4 @@
 # electron-app
- creating a electron app which opens webpages using chromium via electron.
+This is a Electron App. 
+I want to make a browser like app. 
+This app will provides some custom futures like Always on top Tabs. 
